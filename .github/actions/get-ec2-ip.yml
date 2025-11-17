@@ -1,0 +1,42 @@
+# .github/actions/get-ec2-ip.yml
+name: "Get EC2 Public IP by Tag"
+description: "Resolve EC2 public IP from Name tag"
+
+inputs:
+  instance-tag:
+    description: "Value of the Name tag for the instance"
+    required: true
+  aws-region:
+    description: "AWS region"
+    required: true
+
+outputs:
+  ec2_ip:
+    description: "Resolved EC2 public IP"
+    value: ${{ steps.resolve.outputs.ec2_ip }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: resolve
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        TAG="${{ inputs.instance-tag }}"
+        REGION="${{ inputs.aws-region }}"
+
+        IP=$(aws ec2 describe-instances \
+          --region "$REGION" \
+          --filters "Name=tag:Name,Values=$TAG" \
+                    "Name=instance-state-name,Values=running" \
+          --query "Reservations[0].Instances[0].PublicIpAddress" \
+          --output text)
+
+        if [ -z "$IP" ] || [ "$IP" = "None" ]; then
+          echo "ERROR: No running instance found with tag Name=$TAG in $REGION" >&2
+          exit 1
+        fi
+
+        echo "Resolved EC2 IP: $IP"
+        echo "ec2_ip=$IP" >> "$GITHUB_OUTPUT"
